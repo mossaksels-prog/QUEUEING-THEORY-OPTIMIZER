@@ -18,6 +18,10 @@ With strict data pipeline integrity and mandatory error-checking.
 
 import streamlit as st
 import pandas as pd
+import base64
+from pathlib import Path
+import os
+from PIL import Image
 
 # ─────────────────────────────────────────────────────────────────────────────
 # REQUIRED_COLUMNS — Data Contract (STRICT)
@@ -29,6 +33,15 @@ REQUIRED_COLUMNS = [
     "mu",
     "c"
 ]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LOGO UTILITY FUNCTION
+# ─────────────────────────────────────────────────────────────────────────────
+
+def get_base64_image(image_path):
+    """Convert image file to base64 string."""
+    with open(image_path, "rb") as img_file:
+        return base64.b64encode(img_file.read()).decode()
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Session State Initialization (MANDATORY)
@@ -582,6 +595,25 @@ def main():
         color: #22D3EE !important;
     }
     
+    /* Show sidebar collapse button with icon only, hide tooltip text */
+    [data-testid="stSidebar"] button[kind="header"] {
+        font-size: 1rem !important;
+        padding: 0.5rem !important;
+        min-width: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    [data-testid="stSidebar"] button[kind="header"] span {
+        display: none !important;
+    }
+    
+    [data-testid="stSidebar"] button[kind="header"] svg {
+        font-size: 1.25rem !important;
+        display: block !important;
+    }
+    
     /* ─────────────────────────────────────────────────────────────────────────────
        LOGO STRIP - Horizontal Layout
     ───────────────────────────────────────────────────────────────────────────────*/
@@ -652,13 +684,25 @@ def main():
     """, unsafe_allow_html=True)
     
     # Logo strip - perfectly centered
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        st.markdown("""
-        <div style="display: flex; justify-content: center; align-items: center; gap: 28px; margin: 20px 0;">
-            <img src="logo/logo1.png" width="60" style="max-width: 60px; height: auto;">
-            <img src="logo/logo2.png" width="60" style="max-width: 60px; height: auto;">
-            <img src="logo/logo3.png" width="60" style="max-width: 60px; height: auto;">
+    col_left, col_mid, col_right = st.columns([1, 3, 1], gap="small")
+    
+    with col_mid:
+        # Load and encode logos
+        logo1_b64 = get_base64_image("logo/logo1.png")
+        logo2_b64 = get_base64_image("logo/logo2.png")
+        logo3_b64 = get_base64_image("logo/logo3.png")
+        
+        st.markdown(f"""
+        <div style='display: flex; justify-content: center; align-items: center; gap: 24px; margin: 16px 0;'>
+            <div style='display: flex; justify-content: center; width: 80px; height: 80px;'>
+                <img src='data:image/png;base64,{logo1_b64}' style='max-width: 60px; height: auto; object-fit: contain;'>
+            </div>
+            <div style='display: flex; justify-content: center; width: 80px; height: 80px;'>
+                <img src='data:image/png;base64,{logo2_b64}' style='max-width: 60px; height: auto; object-fit: contain;'>
+            </div>
+            <div style='display: flex; justify-content: center; width: 80px; height: 80px;'>
+                <img src='data:image/png;base64,{logo3_b64}' style='max-width: 60px; height: auto; object-fit: contain;'>
+            </div>
         </div>
         """, unsafe_allow_html=True)
     
