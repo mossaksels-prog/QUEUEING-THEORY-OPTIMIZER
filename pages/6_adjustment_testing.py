@@ -907,12 +907,13 @@ elif input_mode == "Segmental Hourly M/G/1":
     
     with col_mg1_btn1:
         num_mg1_sims = st.slider(
-            "Simulations per hour (M/G/1)",
-            min_value=10,
-            max_value=1000,
-            value=NUM_SIMULATIONS,
-            step=10,
-            key="mg1_num_sims"
+            "Simulations per hour (M/G/1) — Higher iterations = more accurate",
+            min_value=100000,
+            max_value=500000,
+            value=100000,
+            step=10000,
+            key="mg1_num_sims",
+            format="%d"
         )
     
     with col_mg1_btn2:
