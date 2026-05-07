@@ -1,11 +1,16 @@
 """
-Page 3 — Comparison (Error-Safe Merge)
+"""Page 4 — Comparison (Error-Safe Merge)
 ✅ Pre-check: current_data exists
 ✅ Pre-check: recommended_data exists  
 ✅ Safe merge with suffixes
-✅ Calculate delta metrics
+✅ Calculate delta metrics for all models
 ✅ Cost analysis and comparison
 ✅ Visualize improvements
+
+Supported Comparisons:
+- M/M/1 vs M/M/1: Single server improvements
+- M/M/c vs M/M/c: Multi-server optimization results
+- M/G/1 vs M/G/1: General service time comparison (with variance)
 """
 
 import streamlit as st

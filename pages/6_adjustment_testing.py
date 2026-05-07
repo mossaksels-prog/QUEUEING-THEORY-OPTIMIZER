@@ -1,11 +1,16 @@
 """
 Page 6 — Adjustment Testing Simulator
 🧪 Manual parameter adjustment testing WITHOUT file uploads
-✅ Same simulation engine as Page 4
-✅ Test custom adjustments interactively
+✅ Same simulation engine as Page 3
+✅ Test custom adjustments for all models (M/M/1, M/M/c, M/G/1)
 ✅ No dependencies on recommended_data
 ✅ Output: failure_rate (util > 0.75), avg_utilization, max_utilization
 ✅ PASS if failure_rate ≤ 10%
+
+Supported Models:
+- M/M/1: Single server parameter testing
+- M/M/c: Multi-server parameter testing
+- M/G/1: General service time parameter testing
 """
 
 import streamlit as st
@@ -44,6 +49,117 @@ ACCEPTABLE_FAILURE_RATE = 0.10  # 10%
 # ─────────────────────────────────────────────────────────────────────────────
 # Monte Carlo Simulation Function
 # ─────────────────────────────────────────────────────────────────────────────
+
+def simulate_scenario_mg1(arrival_rate: float, service_rate: float, servers: int,
+                         service_variance: float, num_simulations: int = 100, 
+                         scenario_name: str = "") -> dict:
+    """
+    Run NUM_SIMULATIONS Monte Carlo trials for M/G/1 scenario.
+    
+    Input: arrival_rate, service_rate, servers, service_variance
+    Output: dict with avg/max utilization, failure_rate, and avg_wq
+    
+    RULES (M/G/1 with general service variance):
+    - Introduce randomness:
+      - Arrival: ±10-20% (0.80 - 1.20)
+      - Service variance factor: ±20% applied to variance parameter
+    - Compute: ρ = λ / (c * μ)
+    - Estimate Wq using M/G/1 formula: Wq = (λ * (σ² + (1/μ)²)) / (2 * (1 - ρ))
+    - Count failures: ρ > 0.75
+    - failure_rate = failures / num_simulations
+    """
+    
+    lambda_base = arrival_rate
+    mu_base = service_rate
+    c = int(servers)
+    variance_base = service_variance
+    
+    # Validation
+    if pd.isna(lambda_base) or pd.isna(mu_base) or pd.isna(c) or c <= 0 or pd.isna(variance_base):
+        return {
+            "scenario_name": scenario_name,
+            "arrival_rate": lambda_base,
+            "service_rate": mu_base,
+            "servers": c,
+            "service_variance": variance_base,
+            "baseline_utilization": np.nan,
+            "avg_utilization": np.nan,
+            "max_utilization": np.nan,
+            "failure_count": 0,
+            "failure_rate": np.nan,
+            "avg_wq": np.nan,
+            "status": "INVALID (M/G/1)",
+        }
+    
+    # Calculate baseline utilization
+    baseline_utilization = lambda_base / (c * mu_base) if (c * mu_base) > 0 else np.inf
+    
+    utilizations = []
+    wq_values = []
+    failures = 0
+    
+    np.random.seed(42)  # Reproducibility
+    
+    for _ in range(num_simulations):
+        # Add randomness
+        arrival_factor = np.random.uniform(*ARRIVAL_VARIANCE_RANGE)
+        variance_factor = np.random.uniform(0.80, 1.20)  # ±20% on variance
+        
+        lambda_sim = lambda_base * arrival_factor
+        variance_sim = variance_base * variance_factor
+        
+        # Compute utilization (ρ = λ / (c * μ))
+        denominator = c * mu_base
+        
+        if denominator == 0:
+            utilization = np.inf
+            wq = np.inf
+        else:
+            utilization = lambda_sim / denominator
+            
+            # M/G/1 formula for Wq (adapted for multiple servers as approximation)
+            # Wq ≈ (λ * (σ² + (1/μ)²)) / (2 * (1 - ρ)) for stability
+            if utilization < 1.0:
+                E_S = 1 / mu_base
+                E_S2 = variance_sim + E_S**2
+                wq = (lambda_sim * E_S2) / (2 * (1 - utilization)) if (1 - utilization) > 0 else 0
+            else:
+                wq = np.inf
+        
+        utilizations.append(utilization)
+        if not np.isinf(wq):
+            wq_values.append(wq)
+        
+        # Check if failure (utilization > threshold)
+        if utilization > FAILURE_THRESHOLD_UTIL:
+            failures += 1
+    
+    avg_util = np.mean(utilizations)
+    max_util = np.max(utilizations)
+    failure_rate = failures / num_simulations
+    avg_wq = np.mean(wq_values) if wq_values else 0
+    
+    # Status
+    if failure_rate <= ACCEPTABLE_FAILURE_RATE:
+        status = "✅ PASS (M/G/1)"
+    else:
+        status = "❌ FAIL (M/G/1)"
+    
+    return {
+        "scenario_name": scenario_name,
+        "arrival_rate": lambda_base,
+        "service_rate": mu_base,
+        "servers": c,
+        "service_variance": variance_base,
+        "baseline_utilization": round(baseline_utilization, 4),
+        "avg_utilization": round(avg_util, 4),
+        "max_utilization": round(max_util, 4),
+        "failure_count": failures,
+        "failure_rate": round(failure_rate, 4),
+        "avg_wq": round(avg_wq, 4),
+        "status": status,
+    }
+
 
 def simulate_scenario(arrival_rate: float, service_rate: float, servers: int, 
                      num_simulations: int = 100, scenario_name: str = "") -> dict:
@@ -197,7 +313,7 @@ st.subheader("📋 Input Mode")
 
 input_mode = st.radio(
     "Choose input method:",
-    ["Quick Single Test", "13-Hour Daily Segments", "Batch Comparison"],
+    ["Quick Single Test", "13-Hour Daily Segments", "Segmental Hourly M/G/1", "Batch Comparison"],
     horizontal=True,
     key="input_mode_selector"
 )
@@ -256,7 +372,7 @@ if input_mode == "Quick Single Test":
         num_sims = st.slider(
             "Simulations per scenario",
             min_value=10,
-            max_value=500,
+            max_value=1000,
             value=NUM_SIMULATIONS,
             step=10,
             key="num_sims_single"
@@ -458,7 +574,7 @@ elif input_mode == "13-Hour Daily Segments":
         num_daily_sims = st.slider(
             "Simulations per hour",
             min_value=10,
-            max_value=500,
+            max_value=1000,
             value=NUM_SIMULATIONS,
             step=10,
             key="daily_num_sims"
@@ -717,6 +833,371 @@ elif input_mode == "13-Hour Daily Segments":
                 st.warning(f"Excel export: {e}")
 
 # ─────────────────────────────────────────────────────────────────────────────
+# SEGMENTAL HOURLY M/G/1
+# ─────────────────────────────────────────────────────────────────────────────
+
+elif input_mode == "Segmental Hourly M/G/1":
+    st.subheader("🔬 Segmental Hourly M/G/1 Simulation")
+    st.markdown("""
+    Simulate **M/G/1 queues** with **general service time distributions**.
+    Each hour segment includes arrival rate, service rate, servers, and **service variance**.
+    """)
+    
+    st.info("M/G/1 accounts for variability in service times — essential for unpredictable workflows")
+    
+    col_mg1_time1, col_mg1_time2 = st.columns(2)
+    
+    with col_mg1_time1:
+        mg1_start_hour = st.selectbox(
+            "Start Hour",
+            options=list(range(24)),
+            format_func=lambda x: f"{x:02d}:00",
+            index=6,
+            key="mg1_start_hour"
+        )
+    
+    with col_mg1_time2:
+        mg1_end_hour = st.selectbox(
+            "End Hour (Start + 13 hours)",
+            options=list(range(24)),
+            format_func=lambda x: f"{x:02d}:00",
+            index=19,
+            key="mg1_end_hour"
+        )
+    
+    # Generate time segments
+    mg1_hourly_segments = generate_hourly_segments(mg1_start_hour, mg1_end_hour)
+    
+    st.markdown("---")
+    st.subheader("📊 M/G/1 Parameters for Each Hour")
+    st.markdown("**Note:** Variance represents the variability of service times. Higher variance = more unpredictable service.")
+    
+    # Initialize session state for M/G/1 segments
+    if "mg1_segment_data" not in st.session_state:
+        st.session_state.mg1_segment_data = None
+    
+    # Create editable dataframe for M/G/1 hourly parameters
+    default_mg1_data = pd.DataFrame({
+        "time_interval": mg1_hourly_segments,
+        "arrival_rate": [5.0] * 13,
+        "service_rate": [2.0] * 13,
+        "servers": [3] * 13,
+        "service_variance": [0.04] * 13,  # Default variance
+    })
+    
+    edited_mg1_df = st.data_editor(
+        default_mg1_data,
+        use_container_width=True,
+        key="mg1_params_editor",
+        num_rows="fixed",
+        column_config={
+            "time_interval": st.column_config.TextColumn("Hour Range", disabled=True),
+            "arrival_rate": st.column_config.NumberColumn("λ (Arrival Rate)", min_value=0.1, step=0.1),
+            "service_rate": st.column_config.NumberColumn("μ (Service Rate)", min_value=0.1, step=0.1),
+            "servers": st.column_config.NumberColumn("Servers", min_value=1, step=1),
+            "service_variance": st.column_config.NumberColumn("Variance (σ²)", min_value=0.001, step=0.01),
+        }
+    )
+    
+    st.session_state.mg1_segment_data = edited_mg1_df
+    
+    # Run button
+    st.markdown("---")
+    col_mg1_btn1, col_mg1_btn2 = st.columns(2)
+    
+    with col_mg1_btn1:
+        num_mg1_sims = st.slider(
+            "Simulations per hour (M/G/1)",
+            min_value=10,
+            max_value=1000,
+            value=NUM_SIMULATIONS,
+            step=10,
+            key="mg1_num_sims"
+        )
+    
+    with col_mg1_btn2:
+        run_mg1 = st.button("🚀 Run M/G/1 Simulation", key="btn_run_mg1")
+    
+    if run_mg1:
+        st.info(f"⏳ Running {len(edited_mg1_df)} hours × {num_mg1_sims} M/G/1 sims...")
+        
+        mg1_results = []
+        progress_bar = st.progress(0)
+        
+        for idx, row in edited_mg1_df.iterrows():
+            result = simulate_scenario_mg1(
+                arrival_rate=row['arrival_rate'],
+                service_rate=row['service_rate'],
+                servers=int(row['servers']),
+                service_variance=row['service_variance'],
+                num_simulations=num_mg1_sims,
+                scenario_name=row['time_interval']
+            )
+            mg1_results.append(result)
+            progress_bar.progress((idx + 1) / len(edited_mg1_df))
+        
+        st.session_state["mg1_results"] = pd.DataFrame(mg1_results)
+        st.success(f"✅ M/G/1 simulation complete!")
+    
+    # Display M/G/1 results
+    if st.session_state.get("mg1_results") is not None:
+        st.markdown("---")
+        st.subheader("📊 M/G/1 Simulation Results (13-Hour)")
+        
+        mg1_df = st.session_state["mg1_results"]
+        
+        # Summary statistics
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            avg_util_mg1 = mg1_df["avg_utilization"].mean()
+            st.metric("Avg Utilization (13h)", f"{avg_util_mg1:.1%}")
+        
+        with col2:
+            avg_failure_mg1 = mg1_df["failure_rate"].mean()
+            status_badge_mg1 = "✅ PASS" if avg_failure_mg1 <= ACCEPTABLE_FAILURE_RATE else "❌ FAIL"
+            st.metric("Avg Failure Rate", f"{avg_failure_mg1:.1%}", status_badge_mg1)
+        
+        with col3:
+            max_util_mg1 = mg1_df["max_utilization"].max()
+            st.metric("Peak Utilization", f"{max_util_mg1:.1%}")
+        
+        with col4:
+            passed_hours_mg1 = (mg1_df["failure_rate"] <= ACCEPTABLE_FAILURE_RATE).sum()
+            pct_pass_mg1 = (passed_hours_mg1 / len(mg1_df) * 100)
+            st.metric("Hours Passed", f"{passed_hours_mg1}/{len(mg1_df)} ({pct_pass_mg1:.0f}%)")
+        
+        # Results table
+        mg1_styled = mg1_df.style.format({
+            "arrival_rate": lambda x: format_number(x, 2),
+            "service_rate": lambda x: format_number(x, 2),
+            "service_variance": lambda x: format_number(x, 4),
+            "baseline_utilization": lambda x: format_number(x, 4),
+            "avg_utilization": lambda x: format_number(x, 4),
+            "max_utilization": lambda x: format_number(x, 4),
+            "failure_rate": lambda x: format_number(x, 4),
+            "avg_wq": lambda x: format_number(x, 4),
+        })
+        st.dataframe(mg1_styled, use_container_width=True)
+        
+        # Visualizations
+        st.markdown("---")
+        st.subheader("📉 M/G/1 13-Hour Analysis")
+        
+        # Chart 1: M/G/1 Utilization and Variance Impact
+        fig_mg1_1 = make_subplots(
+            rows=1, cols=2,
+            subplot_titles=("M/G/1 Utilization by Hour", "Service Variance Impact")
+        )
+        
+        fig_mg1_1.add_trace(
+            go.Scatter(x=mg1_df["scenario_name"], y=mg1_df["baseline_utilization"],
+                      name="Baseline ρ", mode="lines+markers", line=dict(color="orange")),
+            row=1, col=1
+        )
+        
+        fig_mg1_1.add_trace(
+            go.Scatter(x=mg1_df["scenario_name"], y=mg1_df["avg_utilization"],
+                      name="Avg ρ (M/G/1)", mode="lines+markers", line=dict(color="blue")),
+            row=1, col=1
+        )
+        
+        fig_mg1_1.add_hline(y=FAILURE_THRESHOLD_UTIL, line_dash="dash", line_color="red",
+                           annotation_text="Threshold", row=1, col=1)
+        
+        fig_mg1_1.add_trace(
+            go.Scatter(x=mg1_df["scenario_name"], y=mg1_df["service_variance"],
+                      name="Service Variance", mode="lines+markers", line=dict(color="purple")),
+            row=1, col=2
+        )
+        
+        fig_mg1_1.update_yaxes(title_text="Utilization (ρ)", row=1, col=1)
+        fig_mg1_1.update_yaxes(title_text="Variance (σ²)", row=1, col=2)
+        fig_mg1_1.update_layout(height=400, hovermode="x unified")
+        
+        st.plotly_chart(fig_mg1_1, use_container_width=True)
+        
+        # Chart 2: M/G/1 Wait Time Analysis
+        fig_mg1_2 = go.Figure()
+        
+        fig_mg1_2.add_trace(go.Bar(
+            x=mg1_df["scenario_name"],
+            y=mg1_df["avg_wq"],
+            name="Avg Wait Time (Wq)",
+            marker_color="rgba(168, 85, 247, 0.7)",
+            text=mg1_df["avg_wq"].round(2),
+            textposition="outside",
+        ))
+        
+        fig_mg1_2.update_layout(
+            title="M/G/1 Average Wait Time by Hour",
+            xaxis_title="Hour",
+            yaxis_title="Wait Time (Wq)",
+            height=400,
+        )
+        
+        st.plotly_chart(fig_mg1_2, use_container_width=True)
+        
+        # Chart 3: M/G/1 Failure Rate Timeline
+        fig_mg1_3 = go.Figure()
+        
+        colors_mg1 = ["red" if x > ACCEPTABLE_FAILURE_RATE else "green" for x in mg1_df["failure_rate"]]
+        
+        fig_mg1_3.add_trace(go.Bar(
+            x=mg1_df["scenario_name"],
+            y=mg1_df["failure_rate"],
+            marker_color=colors_mg1,
+            name="Failure Rate",
+            text=mg1_df["failure_rate"].round(2),
+            textposition="outside",
+        ))
+        
+        fig_mg1_3.add_hline(y=ACCEPTABLE_FAILURE_RATE, line_dash="dash", line_color="orange",
+                           annotation_text="Acceptable Threshold")
+        
+        fig_mg1_3.update_layout(
+            title="M/G/1 Failure Rate (ρ > 0.75) by Hour",
+            xaxis_title="Hour",
+            yaxis_title="Failure Rate",
+            height=400,
+        )
+        
+        st.plotly_chart(fig_mg1_3, use_container_width=True)
+        
+        # M/G/1 Costing Analysis
+        st.markdown("---")
+        st.subheader("💰 M/G/1 Daily Cost Analysis")
+        
+        costing_mg1_df = pd.DataFrame({
+            "hour": mg1_df["scenario_name"],
+            "server_cost_₱": mg1_df["servers"] * 87.0,
+            "waiting_cost_₱": mg1_df["avg_wq"] * mg1_df["arrival_rate"] * 100.0,
+            "abandonment_cost_₱": mg1_df["arrival_rate"] * 0.10 * 60.0,
+        })
+        
+        costing_mg1_df["total_cost_₱"] = (costing_mg1_df["server_cost_₱"] + 
+                                          costing_mg1_df["waiting_cost_₱"] + 
+                                          costing_mg1_df["abandonment_cost_₱"])
+        
+        # M/G/1 Costing stacked bar chart
+        fig_mg1_cost = go.Figure()
+        
+        fig_mg1_cost.add_trace(go.Bar(
+            x=costing_mg1_df["hour"],
+            y=costing_mg1_df["server_cost_₱"],
+            name="Server Cost",
+            marker_color="rgba(59, 130, 246, 0.7)",
+        ))
+        
+        fig_mg1_cost.add_trace(go.Bar(
+            x=costing_mg1_df["hour"],
+            y=costing_mg1_df["waiting_cost_₱"],
+            name="Waiting Cost",
+            marker_color="rgba(244, 63, 94, 0.7)",
+        ))
+        
+        fig_mg1_cost.add_trace(go.Bar(
+            x=costing_mg1_df["hour"],
+            y=costing_mg1_df["abandonment_cost_₱"],
+            name="Abandonment Cost",
+            marker_color="rgba(251, 191, 36, 0.7)",
+        ))
+        
+        fig_mg1_cost.update_layout(
+            title="M/G/1 Hourly Cost Breakdown (13h Total)",
+            xaxis_title="Hour",
+            yaxis_title="Cost (₱)",
+            barmode="stack",
+            height=400,
+            hovermode="x unified",
+        )
+        
+        st.plotly_chart(fig_mg1_cost, use_container_width=True)
+        
+        # M/G/1 Daily totals
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            total_server_mg1 = costing_mg1_df["server_cost_₱"].sum()
+            st.metric("Total Server Cost (13h)", f"₱{total_server_mg1:,.0f}")
+        
+        with col2:
+            total_waiting_mg1 = costing_mg1_df["waiting_cost_₱"].sum()
+            st.metric("Total Waiting Cost (13h)", f"₱{total_waiting_mg1:,.0f}")
+        
+        with col3:
+            total_abandon_mg1 = costing_mg1_df["abandonment_cost_₱"].sum()
+            st.metric("Total Abandonment Cost (13h)", f"₱{total_abandon_mg1:,.0f}")
+        
+        with col4:
+            total_daily_mg1 = costing_mg1_df["total_cost_₱"].sum()
+            st.metric("TOTAL DAILY COST (13h)", f"₱{total_daily_mg1:,.0f}")
+        
+        # M/G/1 Verdict
+        st.markdown("---")
+        st.subheader("🎯 M/G/1 13-Hour Verdict")
+        
+        overall_failure_mg1 = mg1_df["failure_rate"].mean()
+        avg_variance_mg1 = mg1_df["service_variance"].mean()
+        avg_wq_mg1 = mg1_df["avg_wq"].mean()
+        
+        if overall_failure_mg1 <= ACCEPTABLE_FAILURE_RATE:
+            st.success(f"""
+            ✅ **M/G/1 PASSED**
+            
+            Average failure rate: **{overall_failure_mg1:.2%}** (target: ≤ {ACCEPTABLE_FAILURE_RATE:.0%})
+            Average service variance: **{avg_variance_mg1:.4f}**
+            Average wait time (Wq): **{avg_wq_mg1:.4f}** minutes
+            
+            ✨ M/G/1 configuration is robust across the day!
+            """)
+        else:
+            st.warning(f"""
+            ⚠️ **M/G/1 NEEDS ADJUSTMENT**
+            
+            Average failure rate: **{overall_failure_mg1:.2%}** (target: ≤ {ACCEPTABLE_FAILURE_RATE:.0%})
+            Average service variance: **{avg_variance_mg1:.4f}**
+            
+            💡 Consider increasing servers during high-variance periods.
+            """)
+        
+        # M/G/1 Export results
+        st.markdown("---")
+        st.subheader("💾 Export M/G/1 Results")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            csv_mg1_bytes = mg1_df.to_csv(index=False).encode()
+            st.download_button(
+                "📥 Download CSV (M/G/1 Simulation)",
+                csv_mg1_bytes,
+                "mg1_13hour_simulation.csv",
+                "text/csv",
+                key="mg1_csv_download"
+            )
+        
+        with col2:
+            try:
+                import io
+                excel_mg1_buffer = io.BytesIO()
+                excel_mg1_writer = pd.ExcelWriter(excel_mg1_buffer, engine='openpyxl')
+                mg1_df.to_excel(excel_mg1_writer, index=False, sheet_name="M/G/1 Results")
+                costing_mg1_df.to_excel(excel_mg1_writer, index=False, sheet_name="Costing")
+                excel_mg1_writer.close()
+                excel_mg1_buffer.seek(0)
+                
+                st.download_button(
+                    "📊 Download Excel (M/G/1 Complete)",
+                    excel_mg1_buffer.getvalue(),
+                    "mg1_13hour_analysis.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    key="mg1_excel_download"
+                )
+            except Exception as e:
+                st.warning(f"Excel export: {e}")
+
+# ─────────────────────────────────────────────────────────────────────────────
 # BATCH COMPARISON
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -822,7 +1303,7 @@ else:
             batch_num_sims = st.slider(
                 "Simulations",
                 min_value=10,
-                max_value=500,
+                max_value=1000,
                 value=NUM_SIMULATIONS,
                 step=10,
                 key="batch_num_sims"

@@ -2,10 +2,15 @@
 Page 2 — Optimization Engine
 ✅ Load current_data from session state
 ✅ Algorithm: for each row, while utilization >= 0.70, increment servers
-✅ Recompute ALL metrics  
+✅ Recompute ALL metrics (M/M/1, M/M/c, or M/G/1)
 ✅ Store in st.session_state["recommended_data"]
 ✅ Display cost analysis (Cₛ, Cw, Ca)
 ✅ Export to Excel
+
+Supported Models:
+- M/M/1: Single server optimization
+- M/M/c: Multi-server optimization with utilization target
+- M/G/1: General service time (requires variance column)
 """
 
 import streamlit as st

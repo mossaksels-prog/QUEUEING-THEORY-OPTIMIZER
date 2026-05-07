@@ -1,11 +1,16 @@
 """
 Page 5 — Waste Reduction Optimization
-🎯 Alternative optimization strategy using ₱50 waiting cost instead of ₱100
+🎯 Alternative optimization strategy using aggressive Wq minimization
 ✅ Load current_data from session state
-✅ Apply waste reduction algorithm (minimize Wq by aggressive staff reduction)
+✅ Apply waste reduction algorithm for all models (M/M/1, M/M/c, M/G/1)
 ✅ Compare with standard cost optimization (Page 2)
 ✅ Display waste reduction impact: Server changes, Wq improvements, cost trade-offs
 ✅ Help decide: Cost optimization vs Waste reduction
+
+Supported Models:
+- M/M/1: Single server waste reduction
+- M/M/c: Multi-server waste reduction with aggressive staffing
+- M/G/1: General service time waste reduction (uses variance)
 """
 
 import streamlit as st

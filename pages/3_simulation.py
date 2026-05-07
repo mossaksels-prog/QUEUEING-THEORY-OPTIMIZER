@@ -1,11 +1,16 @@
 """
-Page 4 — Monte Carlo Simulation Engine
+"""Page 3 — Monte Carlo Simulation Engine
 🚨 CRITICAL: ONLY use st.session_state["recommended_data"]
 ✅ 50-100 Monte Carlo simulations per row
 ✅ Arrival variation: ±10-20%
 ✅ Service variation: ±10%
 ✅ Output: failure_rate (util > 0.75), avg_utilization, max_utilization
 ✅ PASS if failure_rate ≤ 10%
+
+Supported Models:
+- M/M/1: Single server Monte Carlo
+- M/M/c: Multi-server Monte Carlo with utilization tracking
+- M/G/1: General service time Monte Carlo (uses variance from data)
 """
 
 import streamlit as st

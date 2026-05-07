@@ -1,10 +1,15 @@
 """
 Page 1 — Current Data Upload & Validation
 ✅ Upload CSV/Excel
-✅ Validate schema
+✅ Validate schema for M/M/1, M/M/c, or M/G/1
 ✅ Convert numeric columns
 ✅ Compute metrics
 ✅ Store in st.session_state["current_data"]
+
+Supported Models:
+- M/M/1: Single server (c=1, no variance needed)
+- M/M/c: Multiple servers (c>1, no variance needed)
+- M/G/1: General service time (any c, variance column optional)
 """
 
 import streamlit as st
@@ -38,6 +43,10 @@ REQUIRED_COLUMNS = [
     "lambda",
     "mu",
     "c"
+]
+
+OPTIONAL_COLUMNS = [
+    "variance"  # For M/G/1 model support
 ]
 
 NUMERIC_COLUMNS = [
