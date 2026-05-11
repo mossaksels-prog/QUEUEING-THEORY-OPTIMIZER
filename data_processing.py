@@ -17,7 +17,7 @@ from optimization import (
     optimize_segments,
     summarize_optimization,
 )
-from queue_models import mm1, mmc
+from queue_models import mgc, mgck, mm1, mmc, mmck
 
 
 CURRENT_COLUMNS = [
@@ -175,8 +175,22 @@ def process_segments(time_segments: Iterable[Mapping]) -> pd.DataFrame:
         lambda_ = segment.get("lambda")
         mu = segment.get("mu")
         c = segment.get("c", 1)
+        variance = segment.get("variance")
+        capacity = segment.get("K")
 
-        if c == 1:
+        if capacity is not None and pd.notna(capacity) and variance is not None and pd.notna(variance):
+            metrics = mgck(lambda_, mu, c, variance, int(capacity))
+            model_name = "M/G/c/K"
+            servers = c
+        elif capacity is not None and pd.notna(capacity):
+            metrics = mmck(lambda_, mu, c, int(capacity))
+            model_name = "M/M/c/K"
+            servers = c
+        elif variance is not None and pd.notna(variance):
+            metrics = mgc(lambda_, mu, c, variance)
+            model_name = "M/G/c"
+            servers = c
+        elif c == 1:
             metrics = mm1(lambda_, mu)
             model_name = "M/M/1"
             servers = 1

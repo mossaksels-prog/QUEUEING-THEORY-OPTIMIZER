@@ -35,7 +35,8 @@ REQUIRED_COLUMNS = [
 ]
 
 OPTIONAL_COLUMNS = [
-    "variance"  # For M/G/1 model support
+    "variance",  # For M/G/c and M/G/c/K model support
+    "K",  # Total finite system capacity for M/M/c/K and M/G/c/K
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -723,7 +724,7 @@ def main():
     st.markdown("""
     <div style="text-align: center; margin-top: 1.5rem;">
         <div class="tags-group">
-            <span class="tag">M/M/1, M/M/c, M/G/1</span>
+            <span class="tag">M/M/1, M/M/c, M/G/c, M/M/c/K, M/G/c/K</span>
             <span class="tag">Monte Carlo simulation</span>
             <span class="tag">Only 4 columns needed</span>
         </div>
@@ -802,7 +803,7 @@ def main():
     # SCHEMA SECTION
     # ═════════════════════════════════════════════════════════════════════════
     st.markdown('<p class="section-title">WHAT TO PREPARE — YOUR CSV SCHEMA</p>', unsafe_allow_html=True)
-    st.markdown('<p style="color: #999; margin-bottom: 1.5rem;"><strong>4 required columns</strong> + 1 optional | <span style="color: #28a745;">Supports M/M/1, M/M/c, and M/G/1</span></p>', unsafe_allow_html=True)
+    st.markdown('<p style="color: #999; margin-bottom: 1.5rem;"><strong>4 required columns</strong> + 2 optional | <span style="color: #28a745;">Supports M/M/1, M/M/c, M/G/c, M/M/c/K, and M/G/c/K</span></p>', unsafe_allow_html=True)
     
     st.markdown("""
     <div class="schema-grid">
@@ -828,13 +829,18 @@ def main():
         </div>
         <div class="schema-item">
             <div class="field-name">variance</div>
-            <div class="field-type">Float — optional (M/G/1)</div>
+            <div class="field-type">Float — optional (M/G/c)</div>
             <div class="field-example">e.g. 0.04</div>
+        </div>
+        <div class="schema-item">
+            <div class="field-name">K</div>
+            <div class="field-type">Integer — optional capacity</div>
+            <div class="field-example">e.g. 12</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
     
-    st.markdown("**Required:** time, lambda, mu, c | **Optional:** variance (for M/G/1 models with general service distributions)")
+    st.markdown("**Required:** time, lambda, mu, c | **Optional:** variance (general service), K (finite total capacity)")
 
     
     st.markdown("---")
@@ -899,15 +905,16 @@ def main():
     **Supported Models**
     - M/M/1 (single server)
     - M/M/c (multi-server)
-    - M/G/1 (general service time)
+    - M/G/c (general service time)
+    - M/M/c/K and M/G/c/K (finite total system capacity)
     
-    **Schema** (4 required + 1 optional)
+    **Schema** (4 required + 2 optional)
     """)
     
     st.sidebar.markdown(f"""
     ```
     {', '.join(REQUIRED_COLUMNS)}
-    variance (optional)
+    variance, K (optional)
     ```
     """)
     

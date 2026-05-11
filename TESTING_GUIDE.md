@@ -488,6 +488,7 @@ SUMMARY OF VERIFICATION POINTS
 ✅ Optimization correctness
 ✅ End-to-end workflow
 
-All tests passed = System ready for production!
+Manual checks passed = dashboard is ready for demonstration and review.
+Run `python -m unittest discover -s tests` for the lightweight automated formula checks.
 
 """

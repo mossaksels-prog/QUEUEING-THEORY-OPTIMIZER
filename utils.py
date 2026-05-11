@@ -10,7 +10,7 @@ Provides modular functions for:
 import pandas as pd
 import numpy as np
 from typing import Dict, Tuple, Union
-from queue_models import mmc
+from queue_models import mgc, mgck, mmc, mmck
 
 # ─────────────────────────────────────────────────────────────────────────────
 # REQUIRED_COLUMNS — Data Contract (STRICT)
@@ -43,9 +43,9 @@ NUMERIC_COLUMNS = [
 # compute_metrics() — Calculate M/M/c queue metrics
 # ─────────────────────────────────────────────────────────────────────────────
 
-def compute_mmc_metrics(lambda_: float, mu: float, c: int) -> Dict[str, float]:
+def compute_mmc_metrics(lambda_: float, mu: float, c: int, variance=None, K=None) -> Dict[str, float]:
     """
-    Compute M/M/c queue steady-state metrics using correct M/M/c formula.
+    Compute M/M/c or M/G/c queue steady-state metrics.
     
     Args:
         lambda_ (float): Arrival rate (customers/hour)
@@ -70,8 +70,14 @@ def compute_mmc_metrics(lambda_: float, mu: float, c: int) -> Dict[str, float]:
             "Ws": np.nan,
         }
     
-    # Use queue_models.mmc() for correct M/M/c calculation
-    result = mmc(lambda_, mu, c)
+    if K is not None and not pd.isna(K) and variance is not None and not pd.isna(variance):
+        result = mgck(lambda_, mu, c, variance, int(K))
+    elif K is not None and not pd.isna(K):
+        result = mmck(lambda_, mu, c, int(K))
+    elif variance is not None and not pd.isna(variance):
+        result = mgc(lambda_, mu, c, variance)
+    else:
+        result = mmc(lambda_, mu, c)
     
     if not result.get("stable", False):
         return {
@@ -123,6 +129,9 @@ def optimize_servers(
     lambda_ = row["arrival_rate"]
     mu = row["service_rate"]
     servers = int(row["servers"])
+    variance = row.get("variance")
+    capacity = row.get("K")
+    max_search_servers = min(max_servers, int(capacity)) if capacity is not None and not pd.isna(capacity) else max_servers
     
     # Validation
     if pd.isna(lambda_) or pd.isna(mu) or pd.isna(servers):
@@ -130,8 +139,8 @@ def optimize_servers(
     
     # Increment servers until target reached
     iteration = 0
-    while servers < max_servers:
-        metrics = compute_mmc_metrics(lambda_, mu, servers)
+    while servers < max_search_servers:
+        metrics = compute_mmc_metrics(lambda_, mu, servers, variance, capacity)
         current_util = metrics["utilization"]
         
         if pd.isna(current_util) or current_util < target_utilization:
@@ -144,7 +153,7 @@ def optimize_servers(
             break
     
     # Final computation
-    final_metrics = compute_mmc_metrics(lambda_, mu, servers)
+    final_metrics = compute_mmc_metrics(lambda_, mu, servers, variance, capacity)
     
     # Update row
     optimized["servers"] = servers

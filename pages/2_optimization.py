@@ -2,7 +2,7 @@
 Page 2 — Optimization Engine
 ✅ Load current_data from session state
 ✅ Algorithm: for each row, while utilization >= 0.70, increment servers
-✅ Recompute ALL metrics (M/M/1, M/M/c, or M/G/1)
+✅ Recompute ALL metrics (M/M/1, M/M/c, M/G/c, M/M/c/K, or M/G/c/K)
 ✅ Store in st.session_state["recommended_data"]
 ✅ Display cost analysis (Cₛ, Cw, Ca)
 ✅ Export to Excel
@@ -10,7 +10,9 @@ Page 2 — Optimization Engine
 Supported Models:
 - M/M/1: Single server optimization
 - M/M/c: Multi-server optimization with utilization target
-- M/G/1: General service time (requires variance column)
+- M/G/c: General service time (requires variance column)
+- M/M/c/K: Finite-capacity multi-server optimization
+- M/G/c/K: Finite-capacity general service optimization
 """
 
 import streamlit as st
@@ -21,7 +23,7 @@ import sys
 # Import utils safely
 sys.path.insert(0, ".")
 from utils import compute_costs
-from queue_models import mmc
+from queue_models import mgc, mgck, mmc, mmck
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Constants
@@ -53,8 +55,8 @@ def format_number(val, decimals=2):
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def compute_mmc_metrics(lambda_: float, mu: float, c: int) -> dict:
-    """Compute M/M/c queue metrics using correct formula."""
+def compute_mmc_metrics(lambda_: float, mu: float, c: int, variance=None, K=None) -> dict:
+    """Compute M/M/c or M/G/c queue metrics using the shared model formulas."""
     if lambda_ < 0 or mu <= 0 or c <= 0:
         return {
             "utilization": np.nan,
@@ -64,8 +66,14 @@ def compute_mmc_metrics(lambda_: float, mu: float, c: int) -> dict:
             "Ws": np.nan,
         }
     
-    # Use queue_models.mmc() for correct M/M/c calculation
-    result = mmc(lambda_, mu, c)
+    if K is not None and not pd.isna(K) and variance is not None and not pd.isna(variance):
+        result = mgck(lambda_, mu, c, variance, int(K))
+    elif K is not None and not pd.isna(K):
+        result = mmck(lambda_, mu, c, int(K))
+    elif variance is not None and not pd.isna(variance):
+        result = mgc(lambda_, mu, c, variance)
+    else:
+        result = mmc(lambda_, mu, c)
     
     if not result.get("stable", False):
         return {
@@ -104,6 +112,9 @@ def optimize_row(row: pd.Series) -> pd.Series:
     lambda_ = row["arrival_rate"]
     mu = row["service_rate"]
     servers = int(row["servers"])
+    variance = row.get("variance")
+    capacity = row.get("K")
+    max_search_servers = min(MAX_SERVERS, int(capacity)) if capacity is not None and not pd.isna(capacity) else MAX_SERVERS
     
     # Safety validation
     if pd.isna(lambda_) or pd.isna(mu) or pd.isna(servers):
@@ -111,8 +122,8 @@ def optimize_row(row: pd.Series) -> pd.Series:
     
     # Increment servers until target utilization reached
     iteration = 0
-    while servers < MAX_SERVERS:
-        metrics = compute_mmc_metrics(lambda_, mu, servers)
+    while servers < max_search_servers:
+        metrics = compute_mmc_metrics(lambda_, mu, servers, variance, capacity)
         current_util = metrics["utilization"]
         
         if pd.isna(current_util) or current_util < UTILIZATION_TARGET:
@@ -126,7 +137,7 @@ def optimize_row(row: pd.Series) -> pd.Series:
             break
     
     # Final computation
-    final_metrics = compute_mmc_metrics(lambda_, mu, servers)
+    final_metrics = compute_mmc_metrics(lambda_, mu, servers, variance, capacity)
     
     # Update row
     optimized["servers"] = servers

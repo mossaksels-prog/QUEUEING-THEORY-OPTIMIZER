@@ -6,7 +6,7 @@ import math
 from collections.abc import Iterable, Mapping
 from numbers import Integral, Real
 
-from queue_models import mm1, mmc
+from queue_models import mgc, mgck, mm1, mmc, mmck
 
 
 DEFAULT_TARGET_UTILIZATION = 0.70
@@ -77,8 +77,14 @@ def _compute_waiting_cost_low(lambda_, wq_value, low_cost=50.0):
         return UNSTABLE_FIXED_COST
 
 
-def _queue_metrics(lambda_, mu, c):
-    """Evaluate a queue segment using the appropriate M/M/1 or M/M/c model."""
+def _queue_metrics(lambda_, mu, c, variance=None, K=None):
+    """Evaluate a segment using the appropriate infinite or finite-capacity model."""
+    if _is_number(K) and _is_number(variance):
+        return mgck(lambda_, mu, c, variance, int(K))
+    if _is_number(K):
+        return mmck(lambda_, mu, c, int(K))
+    if _is_number(variance):
+        return mgc(lambda_, mu, c, variance)
     if c == 1:
         return mm1(lambda_, mu)
     return mmc(lambda_, mu, c)
@@ -189,6 +195,8 @@ def optimize_segment(
     lambda_ = segment.get("lambda")
     mu = segment.get("mu")
     current_c = segment.get("c", 1)
+    variance = segment.get("variance")
+    capacity = segment.get("K")
     cost_per_server = _segment_server_cost(segment, default_server_cost)
 
     if (
@@ -218,7 +226,7 @@ def optimize_segment(
     target_utilization = float(target_utilization)
     max_servers = int(max_servers)
 
-    current_metrics = _queue_metrics(lambda_, mu, current_c)
+    current_metrics = _queue_metrics(lambda_, mu, current_c, variance, capacity)
     current_server_cost = current_c * cost_per_server
     current_waiting_cost = _compute_waiting_cost(lambda_, current_metrics.get("Wq"))
     current_total_cost = current_server_cost + (current_waiting_cost if current_waiting_cost is not None else 0)
@@ -229,7 +237,7 @@ def optimize_segment(
     best_cost_total = float('inf')
     
     for candidate_c in range(1, max_servers + 1):
-        candidate_metrics = _queue_metrics(lambda_, mu, candidate_c)
+        candidate_metrics = _queue_metrics(lambda_, mu, candidate_c, variance, capacity)
         if not candidate_metrics.get("stable"):
             continue
             
@@ -302,7 +310,7 @@ def optimize_segment(
     if current_rho is not None and current_rho <= 0.30 and current_c > 1:
         # Check if we can remove a server while staying stable (ρ ≤ 70%)
         reduced_c = current_c - 1
-        reduced_metrics = _queue_metrics(lambda_, mu, reduced_c)
+        reduced_metrics = _queue_metrics(lambda_, mu, reduced_c, variance, capacity)
         reduced_rho = reduced_metrics.get("rho")
         
         if reduced_rho is not None and reduced_rho <= 0.70 and reduced_metrics.get("stable", False):
@@ -543,6 +551,8 @@ def lean_optimize_segment(
     lambda_ = segment.get("lambda")
     mu = segment.get("mu")
     current_c = segment.get("c", 1)
+    variance = segment.get("variance")
+    capacity = segment.get("K")
     cost_per_server = _segment_server_cost(segment, default_server_cost)
 
     if (
@@ -577,7 +587,7 @@ def lean_optimize_segment(
     min_servers_for_target = None
 
     for candidate_c in range(1, max_servers + 1):
-        candidate_metrics = _queue_metrics(lambda_, mu, candidate_c)
+        candidate_metrics = _queue_metrics(lambda_, mu, candidate_c, variance, capacity)
         server_cost = candidate_c * cost_per_server
         waiting_cost = _compute_waiting_cost(lambda_, candidate_metrics.get("Wq"))
         total_cost = server_cost + (waiting_cost if waiting_cost is not None else 0)
@@ -613,7 +623,7 @@ def lean_optimize_segment(
         ):
             best_cost_scenario = scenario
 
-    current_metrics = _queue_metrics(lambda_, mu, current_c)
+    current_metrics = _queue_metrics(lambda_, mu, current_c, variance, capacity)
     current_server_cost = current_c * cost_per_server
     current_waiting_cost = _compute_waiting_cost(lambda_, current_metrics.get("Wq"))
     current_total_cost = current_server_cost + (current_waiting_cost if current_waiting_cost is not None else 0)
@@ -627,7 +637,7 @@ def lean_optimize_segment(
     if check_waste_hours and current_rho is not None and current_rho <= 0.30 and current_c > 1:
         # Check if we can remove a server while staying stable (ρ ≤ 70%)
         reduced_c = current_c - 1
-        reduced_metrics = _queue_metrics(lambda_, mu, reduced_c)
+        reduced_metrics = _queue_metrics(lambda_, mu, reduced_c, variance, capacity)
         reduced_rho = reduced_metrics.get("rho")
         
         if reduced_rho is not None and reduced_rho <= 0.70 and reduced_metrics.get("stable", False):

@@ -1,7 +1,7 @@
 """
 Page 1 — Current Data Upload & Validation
 ✅ Upload CSV/Excel
-✅ Validate schema for M/M/1, M/M/c, or M/G/1
+✅ Validate schema for M/M/1, M/M/c, M/G/c, M/M/c/K, or M/G/c/K
 ✅ Convert numeric columns
 ✅ Compute metrics
 ✅ Store in st.session_state["current_data"]
@@ -9,14 +9,16 @@ Page 1 — Current Data Upload & Validation
 Supported Models:
 - M/M/1: Single server (c=1, no variance needed)
 - M/M/c: Multiple servers (c>1, no variance needed)
-- M/G/1: General service time (any c, variance column optional)
+- M/G/c: General service time (any c, variance column optional)
+- M/M/c/K: Finite-capacity queue (K column provided)
+- M/G/c/K: Finite-capacity general service queue (variance and K provided)
 """
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from queue_models import mmc
+from queue_models import mgc, mgck, mmc, mmck
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Helper: Format numbers with trailing zeros removed
@@ -46,7 +48,8 @@ REQUIRED_COLUMNS = [
 ]
 
 OPTIONAL_COLUMNS = [
-    "variance"  # For M/G/1 model support
+    "variance",  # For M/G/c and M/G/c/K model support
+    "K",  # Total finite system capacity for M/M/c/K and M/G/c/K
 ]
 
 NUMERIC_COLUMNS = [
@@ -80,8 +83,11 @@ def validate_and_convert_numeric(df: pd.DataFrame) -> tuple[bool, str, pd.DataFr
                 
         except Exception as e:
             return False, f"❌ Error converting '{col}': {str(e)}", df_copy
-    
-    return True, "✅ All numeric columns validated", df_copy
+    for col in OPTIONAL_COLUMNS:
+        if col in df_copy.columns:
+            df_copy[col] = pd.to_numeric(df_copy[col], errors='coerce')
+
+    return True, "All numeric columns validated", df_copy
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -106,28 +112,44 @@ def validate_schema(df: pd.DataFrame) -> tuple[bool, str]:
 
 def compute_mmc_metrics(row: pd.Series) -> dict:
     """
-    Compute M/M/c queue metrics for a single row using correct formula.
-    
-    Input: row with arrival_rate, service_rate, servers
-    Output: dict with Lq, Wq, Ls, Ws, utilization (matches Excel exactly)
+    Compute M/M/c or M/G/c queue metrics for a single row.
+
+    Rows with K use finite-capacity models. Rows with variance use
+    general-service approximations.
     """
-    λ = row["arrival_rate"]
-    μ = row["service_rate"]
+    lambda_ = row["arrival_rate"]
+    mu = row["service_rate"]
     c = int(row["servers"])
-    
+
     # Validation
-    if λ < 0 or μ <= 0 or c <= 0:
+    if lambda_ < 0 or mu <= 0 or c <= 0:
         return {
             "utilization": np.nan,
             "Lq": np.nan,
             "Wq": np.nan,
             "Ls": np.nan,
             "Ws": np.nan,
+            "model": "Invalid",
         }
-    
-    # Use queue_models.mmc() for correct M/M/c calculation
-    result = mmc(λ, μ, c)
-    
+
+    variance = row.get("variance")
+    capacity = row.get("K")
+    has_variance = variance is not None and not pd.isna(variance)
+    has_capacity = capacity is not None and not pd.isna(capacity)
+
+    if has_capacity and has_variance:
+        result = mgck(lambda_, mu, c, variance, int(capacity))
+        model_name = "M/G/c/K"
+    elif has_capacity:
+        result = mmck(lambda_, mu, c, int(capacity))
+        model_name = "M/M/c/K"
+    elif has_variance:
+        result = mgc(lambda_, mu, c, variance)
+        model_name = "M/G/c"
+    else:
+        result = mmc(lambda_, mu, c)
+        model_name = "M/M/c"
+
     if not result.get("stable", False):
         return {
             "utilization": result.get("rho", np.nan),
@@ -135,14 +157,16 @@ def compute_mmc_metrics(row: pd.Series) -> dict:
             "Wq": np.inf,
             "Ls": np.inf,
             "Ws": np.inf,
+            "model": model_name,
         }
-    
+
     return {
         "utilization": round(result["rho"], 4),
         "Lq": round(result["Lq"], 4),
         "Wq": round(result["Wq"], 4),
         "Ls": round(result["L"], 4),
         "Ws": round(result["W"], 4),
+        "model": model_name,
     }
 
 
@@ -161,7 +185,7 @@ with col1:
     uploaded_file = st.file_uploader(
         "Choose CSV or Excel file",
         type=["csv", "xlsx", "xls"],
-        help="File must contain: time, lambda, mu, c"
+        help="Required: time, lambda, mu, c. Optional: variance, K."
     )
 
 with col2:
@@ -201,7 +225,7 @@ if uploaded_file is not None:
         st.error(f"❌ Error reading file: {e}")
         df_to_process = None
 else:
-    st.info("👉 **Start here:** Upload a CSV or Excel file with columns: time, lambda, mu, c")
+    st.info("👉 **Start here:** Upload a CSV or Excel file with required columns: time, lambda, mu, c. Optional columns: variance, K.")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Validation Stage

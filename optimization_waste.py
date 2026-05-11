@@ -147,6 +147,8 @@ def optimize_segment_waste(
     lambda_ = segment.get("lambda")
     mu = segment.get("mu")
     current_c = segment.get("c", 1)
+    variance = segment.get("variance")
+    capacity = segment.get("K")
     cost_per_server = _segment_server_cost(segment, default_server_cost)
 
     if (
@@ -172,7 +174,7 @@ def optimize_segment_waste(
     max_servers = int(max_servers)
 
     # Get current scenario metrics (including abandonment cost)
-    current_metrics = _queue_metrics(lambda_, mu, current_c)
+    current_metrics = _queue_metrics(lambda_, mu, current_c, variance, capacity)
     current_costs = _compute_total_cost_waste(
         lambda_=lambda_,
         wq_value=current_metrics.get("Wq"),
@@ -189,7 +191,7 @@ def optimize_segment_waste(
     best_waste_total = float('inf')
 
     for candidate_c in range(1, max_servers + 1):
-        candidate_metrics = _queue_metrics(lambda_, mu, candidate_c)
+        candidate_metrics = _queue_metrics(lambda_, mu, candidate_c, variance, capacity)
         if not candidate_metrics.get("stable"):
             continue
 
