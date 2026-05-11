@@ -1,4 +1,3 @@
-"""
 """Page 3 — Monte Carlo Simulation Engine
 🚨 CRITICAL: ONLY use st.session_state["recommended_data"]
 ✅ 50-100 Monte Carlo simulations per row

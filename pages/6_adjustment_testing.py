@@ -282,21 +282,21 @@ st.markdown("""
 # Helper: Generate 13 hourly segments
 # ─────────────────────────────────────────────────────────────────────────────
 
-def generate_hourly_segments(start_hour: int, end_hour: int) -> list:
+def generate_hourly_segments(start_hour: int, duration: int) -> list:
     """
-    Generate 13 hourly time intervals.
+    Generate hourly time intervals.
     
     Args:
         start_hour: Start hour (0-23)
-        end_hour: End hour (0-23)
+        duration: Number of hours to generate (minimum 8)
     
     Returns:
-        List of 13 time interval labels
+        List of time interval labels
     """
     segments = []
     current_hour = start_hour
     
-    for i in range(13):
+    for i in range(duration):
         next_hour = (current_hour + 1) % 24
         segments.append(f"{current_hour:02d}:00-{next_hour:02d}:00")
         current_hour = next_hour
@@ -313,7 +313,7 @@ st.subheader("📋 Input Mode")
 
 input_mode = st.radio(
     "Choose input method:",
-    ["Quick Single Test", "13-Hour Daily Segments", "Segmental Hourly M/G/1", "Batch Comparison"],
+    ["Quick Single Test", "MM1/MMC DAILY SEGMENTS", "Segmental Hourly M/G/1", "Batch Comparison"],
     horizontal=True,
     key="input_mode_selector"
 )
@@ -508,10 +508,10 @@ if input_mode == "Quick Single Test":
 # 13-HOUR DAILY SEGMENTS
 # ─────────────────────────────────────────────────────────────────────────────
 
-elif input_mode == "13-Hour Daily Segments":
-    st.subheader("⏰ 13-Hour Daily Segments (Start → End Time)")
+elif input_mode == "MM1/MMC DAILY SEGMENTS":
+    st.subheader("⏰ Daily Segments (Start → Duration)")
     
-    st.info("Specify start and end times, then input parameters for each hourly segment")
+    st.info("Specify start time and duration, then input parameters for each hourly segment")
     
     col_time1, col_time2 = st.columns(2)
     
@@ -525,16 +525,17 @@ elif input_mode == "13-Hour Daily Segments":
         )
     
     with col_time2:
-        end_hour = st.selectbox(
-            "End Hour (Start + 13 hours)",
-            options=list(range(24)),
-            format_func=lambda x: f"{x:02d}:00",
-            index=19,
-            key="daily_end_hour"
+        daily_duration = st.slider(
+            "Duration (hours)",
+            min_value=8,
+            max_value=24,
+            value=13,
+            step=1,
+            key="daily_duration"
         )
     
     # Generate time segments
-    hourly_segments = generate_hourly_segments(start_hour, end_hour)
+    hourly_segments = generate_hourly_segments(start_hour, daily_duration)
     
     st.markdown("---")
     st.subheader("📊 Input Parameters for Each Hour")
@@ -546,9 +547,9 @@ elif input_mode == "13-Hour Daily Segments":
     # Create editable dataframe for hourly parameters
     default_daily_data = pd.DataFrame({
         "time_interval": hourly_segments,
-        "arrival_rate": [5.0] * 13,
-        "service_rate": [2.0] * 13,
-        "servers": [3] * 13,
+        "arrival_rate": [5.0] * daily_duration,
+        "service_rate": [2.0] * daily_duration,
+        "servers": [3] * daily_duration,
     })
     
     edited_daily_df = st.data_editor(
@@ -581,7 +582,7 @@ elif input_mode == "13-Hour Daily Segments":
         )
     
     with col_daily_btn2:
-        run_daily = st.button("🚀 Run 13-Hour Simulation", key="btn_run_daily")
+        run_daily = st.button(f"🚀 Run {daily_duration}-Hour Simulation", key="btn_run_daily")
     
     if run_daily:
         st.info(f"⏳ Running {len(edited_daily_df)} hours × {num_daily_sims} sims...")
@@ -601,21 +602,18 @@ elif input_mode == "13-Hour Daily Segments":
             progress_bar.progress((idx + 1) / len(edited_daily_df))
         
         st.session_state["daily_results"] = pd.DataFrame(daily_results)
-        st.success(f"✅ 13-Hour simulation complete!")
+        st.success(f"✅ {daily_duration}-Hour simulation complete!")
     
     # Display daily results
     if st.session_state.get("daily_results") is not None:
         st.markdown("---")
-        st.subheader("📊 13-Hour Simulation Results")
-        
-        daily_df = st.session_state["daily_results"]
-        
+        st.subheader(f"📊 {daily_duration}-Hour Simulation Results")
         # Summary statistics
         col1, col2, col3, col4 = st.columns(4)
         
         with col1:
             avg_util = daily_df["avg_utilization"].mean()
-            st.metric("Avg Utilization (13h)", f"{avg_util:.1%}")
+            st.metric(f"Avg Utilization ({daily_duration}h)", f"{avg_util:.1%}")
         
         with col2:
             avg_failure = daily_df["failure_rate"].mean()
@@ -746,7 +744,7 @@ elif input_mode == "13-Hour Daily Segments":
         ))
         
         fig3.update_layout(
-            title="Hourly Cost Breakdown (13h Total)",
+            title=f"Hourly Cost Breakdown ({daily_duration}h Total)",
             xaxis_title="Hour",
             yaxis_title="Cost (₱)",
             barmode="stack",
@@ -761,23 +759,23 @@ elif input_mode == "13-Hour Daily Segments":
         
         with col1:
             total_server = costing_daily_df["server_cost_₱"].sum()
-            st.metric("Total Server Cost (13h)", f"₱{total_server:,.0f}")
+            st.metric(f"Total Server Cost ({daily_duration}h)", f"₱{total_server:,.0f}")
         
         with col2:
             total_waiting = costing_daily_df["waiting_cost_₱"].sum()
-            st.metric("Total Waiting Cost (13h)", f"₱{total_waiting:,.0f}")
+            st.metric(f"Total Waiting Cost ({daily_duration}h)", f"₱{total_waiting:,.0f}")
         
         with col3:
             total_abandon = costing_daily_df["abandonment_cost_₱"].sum()
-            st.metric("Total Abandonment Cost (13h)", f"₱{total_abandon:,.0f}")
+            st.metric(f"Total Abandonment Cost ({daily_duration}h)", f"₱{total_abandon:,.0f}")
         
         with col4:
             total_daily = costing_daily_df["total_cost_₱"].sum()
-            st.metric("TOTAL DAILY COST (13h)", f"₱{total_daily:,.0f}")
+            st.metric(f"TOTAL DAILY COST ({daily_duration}h)", f"₱{total_daily:,.0f}")
         
         # Overall verdict
         st.markdown("---")
-        st.subheader("🎯 13-Hour Verdict")
+        st.subheader(f"🎯 {daily_duration}-Hour Verdict")
         
         overall_failure = daily_df["failure_rate"].mean()
         
@@ -800,7 +798,7 @@ elif input_mode == "13-Hour Daily Segments":
         
         # Export daily results
         st.markdown("---")
-        st.subheader("💾 Export 13-Hour Results")
+        st.subheader("💾 Export Results")
         
         col1, col2 = st.columns(2)
         
@@ -809,7 +807,7 @@ elif input_mode == "13-Hour Daily Segments":
             st.download_button(
                 "📥 Download CSV (Simulation)",
                 csv_bytes,
-                "13hour_simulation.csv",
+                f"{daily_duration}hour_simulation.csv",
                 "text/csv",
             )
         
@@ -826,7 +824,7 @@ elif input_mode == "13-Hour Daily Segments":
                 st.download_button(
                     "📊 Download Excel (Complete)",
                     excel_buffer.getvalue(),
-                    "13hour_analysis.xlsx",
+                    f"{daily_duration}hour_analysis.xlsx",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
             except Exception as e:
@@ -857,16 +855,17 @@ elif input_mode == "Segmental Hourly M/G/1":
         )
     
     with col_mg1_time2:
-        mg1_end_hour = st.selectbox(
-            "End Hour (Start + 13 hours)",
-            options=list(range(24)),
-            format_func=lambda x: f"{x:02d}:00",
-            index=19,
-            key="mg1_end_hour"
+        mg1_duration = st.slider(
+            "Duration (hours)",
+            min_value=8,
+            max_value=24,
+            value=13,
+            step=1,
+            key="mg1_duration"
         )
     
     # Generate time segments
-    mg1_hourly_segments = generate_hourly_segments(mg1_start_hour, mg1_end_hour)
+    mg1_hourly_segments = generate_hourly_segments(mg1_start_hour, mg1_duration)
     
     st.markdown("---")
     st.subheader("📊 M/G/1 Parameters for Each Hour")
@@ -879,10 +878,10 @@ elif input_mode == "Segmental Hourly M/G/1":
     # Create editable dataframe for M/G/1 hourly parameters
     default_mg1_data = pd.DataFrame({
         "time_interval": mg1_hourly_segments,
-        "arrival_rate": [5.0] * 13,
-        "service_rate": [2.0] * 13,
-        "servers": [3] * 13,
-        "service_variance": [0.04] * 13,  # Default variance
+        "arrival_rate": [5.0] * mg1_duration,
+        "service_rate": [2.0] * mg1_duration,
+        "servers": [3] * mg1_duration,
+        "service_variance": [0.04] * mg1_duration,  # Default variance
     })
     
     edited_mg1_df = st.data_editor(
@@ -1105,7 +1104,7 @@ elif input_mode == "Segmental Hourly M/G/1":
         ))
         
         fig_mg1_cost.update_layout(
-            title="M/G/1 Hourly Cost Breakdown (13h Total)",
+            title=f"M/G/1 Hourly Cost Breakdown ({mg1_duration}h Total)",
             xaxis_title="Hour",
             yaxis_title="Cost (₱)",
             barmode="stack",
@@ -1120,23 +1119,23 @@ elif input_mode == "Segmental Hourly M/G/1":
         
         with col1:
             total_server_mg1 = costing_mg1_df["server_cost_₱"].sum()
-            st.metric("Total Server Cost (13h)", f"₱{total_server_mg1:,.0f}")
+            st.metric(f"Total Server Cost ({mg1_duration}h)", f"₱{total_server_mg1:,.0f}")
         
         with col2:
             total_waiting_mg1 = costing_mg1_df["waiting_cost_₱"].sum()
-            st.metric("Total Waiting Cost (13h)", f"₱{total_waiting_mg1:,.0f}")
+            st.metric(f"Total Waiting Cost ({mg1_duration}h)", f"₱{total_waiting_mg1:,.0f}")
         
         with col3:
             total_abandon_mg1 = costing_mg1_df["abandonment_cost_₱"].sum()
-            st.metric("Total Abandonment Cost (13h)", f"₱{total_abandon_mg1:,.0f}")
+            st.metric(f"Total Abandonment Cost ({mg1_duration}h)", f"₱{total_abandon_mg1:,.0f}")
         
         with col4:
             total_daily_mg1 = costing_mg1_df["total_cost_₱"].sum()
-            st.metric("TOTAL DAILY COST (13h)", f"₱{total_daily_mg1:,.0f}")
+            st.metric(f"TOTAL COST ({mg1_duration}h)", f"₱{total_daily_mg1:,.0f}")
         
         # M/G/1 Verdict
         st.markdown("---")
-        st.subheader("🎯 M/G/1 13-Hour Verdict")
+        st.subheader(f"🎯 M/G/1 {mg1_duration}-Hour Verdict")
         
         overall_failure_mg1 = mg1_df["failure_rate"].mean()
         avg_variance_mg1 = mg1_df["service_variance"].mean()
@@ -1173,7 +1172,7 @@ elif input_mode == "Segmental Hourly M/G/1":
             st.download_button(
                 "📥 Download CSV (M/G/1 Simulation)",
                 csv_mg1_bytes,
-                "mg1_13hour_simulation.csv",
+                f"mg1_{mg1_duration}hour_simulation.csv",
                 "text/csv",
                 key="mg1_csv_download"
             )
@@ -1191,7 +1190,7 @@ elif input_mode == "Segmental Hourly M/G/1":
                 st.download_button(
                     "📊 Download Excel (M/G/1 Complete)",
                     excel_mg1_buffer.getvalue(),
-                    "mg1_13hour_analysis.xlsx",
+                    f"mg1_{mg1_duration}hour_analysis.xlsx",
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     key="mg1_excel_download"
                 )

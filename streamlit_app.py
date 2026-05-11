@@ -847,8 +847,8 @@ def main():
     st.markdown("""
     <div class="testimonials-grid">
         <div class="testimonial-card">
-            <p>"We had been adding agents for months. Turns out two queues were already over-served. This showed us where the real problem was."</p>
-            <div class="author">Operations lead, BPO company</div>
+            <p>"Optimizing our checkout queues didn't just reduce wait times—it completely transformed how we operate. We cut unnecessary labor costs, improved customer satisfaction, and freed up resources to invest back into the business."</p>
+            <div class="author">Operations Director, Grocery Retail Group</div>
         </div>
         <div class="testimonial-card">
             <p>"The simulation page alone was worth it. We stress-tested our peak-hour setup and caught a failure mode we never would have predicted."</p>
