@@ -1024,7 +1024,7 @@ elif input_mode == "Segmental Hourly M/G/c":
         mg1_df = st.session_state["mg1_results"]
         
         # Summary statistics
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4, col5 = st.columns(5)
         
         with col1:
             avg_util_mg1 = mg1_df["avg_utilization"].mean()
