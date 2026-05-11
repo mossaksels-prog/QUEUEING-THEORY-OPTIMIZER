@@ -9,13 +9,16 @@
 Supported Models:
 - M/M/1: Single server Monte Carlo
 - M/M/c: Multi-server Monte Carlo with utilization tracking
-- M/G/1: General service time Monte Carlo (uses variance from data)
+- M/G/c: General service time Monte Carlo (uses variance from data)
+- M/M/c/K: Finite-capacity Monte Carlo approximation (uses K)
+- M/G/c/K: Finite-capacity general service approximation (uses variance and K)
 """
 
 import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+from queue_models import mgc, mgck, mmck
 from plotly.subplots import make_subplots
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -69,6 +72,8 @@ def simulate_row(row: pd.Series, num_simulations: int = 100) -> dict:
     lambda_base = row["arrival_rate"]
     mu_base = row["service_rate"]
     c = int(row["servers"])
+    variance_base = row.get("variance")
+    capacity = row.get("K")
     
     # Validation
     if pd.isna(lambda_base) or pd.isna(mu_base) or pd.isna(c) or c <= 0:
@@ -105,7 +110,18 @@ def simulate_row(row: pd.Series, num_simulations: int = 100) -> dict:
             utilization = lambda_sim / denominator
             # Estimate Wq: λ / (c * μ * (c - λ/μ))
             # Simplified: Wq ≈ λ / (μ * c^2) for stable systems
-            if utilization < 1.0:
+            if capacity is not None and not pd.isna(capacity) and variance_base is not None and not pd.isna(variance_base):
+                variance_sim = variance_base * service_factor
+                metrics = mgck(lambda_sim, mu_sim, c, variance_sim, int(capacity))
+                wq = metrics["Wq"] if metrics.get("stable", False) else np.inf
+            elif capacity is not None and not pd.isna(capacity):
+                metrics = mmck(lambda_sim, mu_sim, c, int(capacity))
+                wq = metrics["Wq"] if metrics.get("stable", False) else np.inf
+            elif variance_base is not None and not pd.isna(variance_base):
+                variance_sim = variance_base * service_factor
+                metrics = mgc(lambda_sim, mu_sim, c, variance_sim)
+                wq = metrics["Wq"] if metrics.get("stable", False) else np.inf
+            elif utilization < 1.0:
                 wq = lambda_sim / (mu_sim * c * (1 - utilization)) if (1 - utilization) > 0 else 0
             else:
                 wq = np.inf
@@ -265,7 +281,28 @@ if st.session_state.get("simulation_results") is not None:
         passed_rows = (results_df["failure_rate"] <= ACCEPTABLE_FAILURE_RATE).sum()
         pct_pass = (passed_rows / len(results_df) * 100)
         st.metric("Rows Passed", f"{passed_rows}/{len(results_df)} ({pct_pass:.0f}%)")
-    
+
+    st.markdown("---")
+    st.subheader("Presentation Dashboard")
+
+    peak_row = results_df.loc[results_df["failure_rate"].idxmax()]
+    verdict = "✅ Staffing Validated" if avg_failure <= ACCEPTABLE_FAILURE_RATE else "⚠️ Needs Review"
+    message = (
+        f"{passed_rows} of {len(results_df)} intervals passed the simulation. "
+        f"Highest risk: {peak_row['time_interval']} at {peak_row['failure_rate']:.1%} failure rate."
+    )
+
+    dash_col1, dash_col2 = st.columns([1, 2])
+    with dash_col1:
+        st.metric("Simulation Verdict", verdict)
+        st.metric("Highest Risk Interval", str(peak_row["time_interval"]))
+        st.metric("Highest Failure Rate", f"{peak_row['failure_rate']:.1%}")
+    with dash_col2:
+        if avg_failure <= ACCEPTABLE_FAILURE_RATE:
+            st.success(message)
+        else:
+            st.warning(message)
+        st.caption("Use this dashboard as the presentation summary for the simulation page.")    
     # ─────────────────────────────────────────────────────────────────────────────
     # Results Table
     # ─────────────────────────────────────────────────────────────────────────────

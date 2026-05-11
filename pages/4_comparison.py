@@ -9,7 +9,8 @@
 Supported Comparisons:
 - M/M/1 vs M/M/1: Single server improvements
 - M/M/c vs M/M/c: Multi-server optimization results
-- M/G/1 vs M/G/1: General service time comparison (with variance)
+- M/G/c vs M/G/c: General service time comparison (with variance)
+- M/M/c/K and M/G/c/K: Finite-capacity comparisons when K is provided
 """
 
 import streamlit as st
@@ -205,6 +206,28 @@ with col4:
     )
 
 # ─────────────────────────────────────────────────────────────────────────────
+st.markdown("---")
+st.subheader("Presentation Dashboard")
+
+comparison_verdict = "✅ Improves Queue" if rows_improved > 0 else "ℹ️ No Improvement"
+comparison_message = (
+    f"Recommended staffing changes {total_servers_current} total server-slots to "
+    f"{total_servers_recommended}. Average utilization moves from {util_current:.1%} "
+    f"to {util_recommended:.1%}, and average wait time moves from {wq_current:.4f}h "
+    f"to {wq_recommended:.4f}h."
+)
+
+pres_col1, pres_col2 = st.columns([1, 2])
+with pres_col1:
+    st.metric("Comparison Verdict", comparison_verdict)
+    st.metric("Intervals Improved", f"{rows_improved}/{len(comparison_df)}")
+    st.metric("Server Change", f"{server_delta:+d}")
+with pres_col2:
+    if rows_improved > 0:
+        st.success(comparison_message)
+    else:
+        st.info(comparison_message)
+    st.caption("Use this dashboard to explain current vs recommended staffing in one slide.")
 # COST ANALYSIS (NEW)
 # ─────────────────────────────────────────────────────────────────────────────
 

@@ -2,7 +2,7 @@
 Page 5 — Waste Reduction Optimization
 🎯 Alternative optimization strategy using aggressive Wq minimization
 ✅ Load current_data from session state
-✅ Apply waste reduction algorithm for all models (M/M/1, M/M/c, M/G/1)
+✅ Apply waste reduction algorithm for all models (M/M/1, M/M/c, M/G/c, M/M/c/K, M/G/c/K)
 ✅ Compare with standard cost optimization (Page 2)
 ✅ Display waste reduction impact: Server changes, Wq improvements, cost trade-offs
 ✅ Help decide: Cost optimization vs Waste reduction
@@ -10,7 +10,9 @@ Page 5 — Waste Reduction Optimization
 Supported Models:
 - M/M/1: Single server waste reduction
 - M/M/c: Multi-server waste reduction with aggressive staffing
-- M/G/1: General service time waste reduction (uses variance)
+- M/G/c: General service time waste reduction (uses variance)
+- M/M/c/K: Finite-capacity waste reduction (uses K)
+- M/G/c/K: Finite-capacity general service waste reduction
 """
 
 import streamlit as st
@@ -153,6 +155,27 @@ if not waste_df.empty:
         )
 
 # ─────────────────────────────────────────────────────────────────────────────
+    st.markdown("---")
+    st.subheader("Presentation Dashboard")
+
+    waste_verdict = "✅ Financially Favorable" if total_savings >= 0 else "⚠️ Needs Review"
+    waste_message = (
+        f"Waste strategy changes staffing by {int(total_server_change):+d} server-slots. "
+        f"Average utilization changes from {avg_current_util:.1f}% to {avg_waste_util:.1f}%, "
+        f"and estimated cost impact is PHP {total_savings:+,.0f}."
+    )
+
+    waste_col1, waste_col2 = st.columns([1, 2])
+    with waste_col1:
+        st.metric("Waste Verdict", waste_verdict)
+        st.metric("Staffing Change", f"{int(total_server_change):+d}")
+        st.metric("Cost Impact", f"PHP {total_savings:+,.0f}")
+    with waste_col2:
+        if total_savings >= 0:
+            st.success(waste_message)
+        else:
+            st.warning(waste_message)
+        st.caption("Use this dashboard to discuss the trade-off between labor savings and customer waiting time.")
 # DETAILED TABLE
 # ─────────────────────────────────────────────────────────────────────────────
 
